@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import App from "./App";
 import { Home } from "./Home";
-import Spendings from "./Spendings"; // or whatever file name you use
+import Spendings from "./Spendings"; 
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
