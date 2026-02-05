@@ -1,0 +1,69 @@
+.app {
+  display: flex;
+  height: 100vh;
+  background: #252583;
+
+  box-sizing: border-box;
+  padding: 16px;
+
+  overflow: hidden;
+}
+
+h1 {
+  text-align: center;
+  color: white;
+  font-size: large;
+  font-weight: bold;
+}
+
+.sidebar {
+  width: 200px;
+  padding: 32px 24px;
+  height: 100%;
+  font-weight: bold;
+  font-size: 20px;
+
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: center;
+  margin-top: 40px;
+}
+
+.nav-item {
+  color: white;
+  text-decoration: none;
+  font-size: 25px;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.nav-item:hover {
+  opacity: 1;
+}
+
+.nav-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: inline-block;
+  opacity: 0.85;
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 16px;
+  padding: 40px;
+  background: white;
+  border-radius: 24px;
+  overflow-y: auto;
+  border: none;
+}
+
+.logo-img {
+  width: 250px;
+  height: auto;
+}
