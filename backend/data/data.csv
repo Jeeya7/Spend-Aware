@@ -1,0 +1,110 @@
+text,category
+coffee,Food
+lunch,Food
+dinner,Food
+groceries,Food
+snacks,Food
+pizza,Food
+burger,Food
+breakfast,Food
+dessert,Food
+takeout,Food
+coffee shop,Food
+fast food,Food
+grocery store,Food
+late snacks,Food
+food order,Food
+
+uber,Transport
+lyft,Transport
+bus,Transport
+train,Transport
+gas,Transport
+parking,Transport
+toll,Transport
+fuel,Transport
+commute,Transport
+ride,Transport
+uber ride,Transport
+bus pass,Transport
+train ticket,Transport
+gas refill,Transport
+parking fee,Transport
+
+rent,Rent
+lease,Rent
+housing,Rent
+apartment,Rent
+room,Rent
+rent payment,Rent
+monthly rent,Rent
+lease payment,Rent
+room rent,Rent
+rent split,Rent
+
+electricity,Bills
+internet,Bills
+wifi,Bills
+water,Bills
+phone,Bills
+gas bill,Bills
+electric bill,Bills
+water bill,Bills
+phone bill,Bills
+utility bill,Bills
+
+amazon,Shopping
+target,Shopping
+walmart,Shopping
+shopping,Shopping
+clothes,Shopping
+shoes,Shopping
+gift,Shopping
+furniture,Shopping
+online shopping,Shopping
+clothing store,Shopping
+shoe purchase,Shopping
+gift purchase,Shopping
+amazon order,Shopping
+home decor,Shopping
+
+netflix,Entertainment
+spotify,Entertainment
+movies,Entertainment
+concert,Entertainment
+gaming,Entertainment
+games,Entertainment
+cinema,Entertainment
+subscription,Entertainment
+movie tickets,Entertainment
+concert tickets,Entertainment
+music subscription,Entertainment
+game purchase,Entertainment
+streaming service,Entertainment
+
+doctor,Health
+pharmacy,Health
+medicine,Health
+dentist,Health
+therapy,Health
+vitamins,Health
+hospital,Health
+medical,Health
+doctor visit,Health
+pharmacy refill,Health
+medical bill,Health
+health check,Health
+
+gym,Other
+donation,Other
+charity,Other
+misc,Other
+random,Other
+fee,Other
+charge,Other
+cash,Other
+bank fee,Other
+service charge,Other
+misc expense,Other
+unknown charge,Other
+cash withdrawal,Other
