@@ -1,12 +1,5 @@
 import { useState } from "react";
-import {
-  Modal,
-  Box,
-  TextField,
-  Button,
-  Typography,
-  Stack,
-} from "@mui/material";
+import { Modal, Box, TextField, Button, Typography, Stack } from "@mui/material";
 import type { Expense } from "./Spendings";
 
 type Props = {
@@ -20,8 +13,8 @@ const modalStyle = {
   left: "50%",
   transform: "translate(-50%, -50%)",
   width: 420,
-  bgcolor: "#FFF7FB", 
-  borderRadius: 5,    
+  bgcolor: "#FFF7FB",
+  borderRadius: 5,
   p: 4,
 
   boxShadow: `
@@ -32,39 +25,57 @@ const modalStyle = {
   border: "1px solid rgba(236,72,153,0.25)",
 };
 
-
-
 export default function AddSpending({ onClose, onAdd }: Props) {
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
+    const cleanTitle = title.trim();
     const num = Number(amount);
-    if (!title.trim() || !Number.isFinite(num) || num <= 0) return;
+    if (!cleanTitle || !Number.isFinite(num) || num <= 0) return;
+
+    setSaving(true);
+
+    let category: string | undefined = undefined;
+
+    try {
+      const res = await fetch("http://localhost:8000/api/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: cleanTitle }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        category = data.prediction; 
+        console.log("Predicted category:", category);
+      }
+    } catch {
+      // if backend is down, just add without category
+    }
 
     onAdd({
       id: crypto.randomUUID(),
-      title: title.trim(),
+      title: cleanTitle,
       amount: num,
       date: new Date(),
       notes: notes.trim() || undefined,
+      category,
     });
 
+    setSaving(false);
     onClose();
   }
 
   return (
     <Modal open onClose={onClose}>
       <Box sx={modalStyle}>
-        <Typography variant="h6" sx={{
-                                        fontWeight: 300,
-                                        color: "#BE185D",
-                                        mb: 1,
-                                    }}>
-            Add Expense
+        <Typography variant="h6" sx={{ fontWeight: 300, color: "#BE185D", mb: 1 }}>
+          Add Expense
         </Typography>
 
         <form onSubmit={handleSubmit}>
@@ -75,7 +86,6 @@ export default function AddSpending({ onClose, onAdd }: Props) {
               onChange={(e) => setTitle(e.target.value)}
               required
               autoFocus
-              
             />
 
             <TextField
@@ -95,9 +105,9 @@ export default function AddSpending({ onClose, onAdd }: Props) {
             />
 
             <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button onClick={onClose}>Cancel</Button>
-              <Button type="submit" variant="contained">
-                Add
+              <Button onClick={onClose} disabled={saving}>Cancel</Button>
+              <Button type="submit" variant="contained" disabled={saving}>
+                {saving ? "Adding..." : "Add"}
               </Button>
             </Stack>
           </Stack>

@@ -11,6 +11,7 @@ export type Expense = {
   amount: number;
   date: Date;
   notes?: string;
+  category?: string;
 };
 
 function Spendings() {
@@ -102,12 +103,23 @@ function Spendings() {
                   {e.notes}
                 </Typography>
               )}
+
+              {e.category && (
+                <Typography
+                  sx={{
+                    mt: 1,
+                    color: "rgba(157,23,77,0.7)",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  Category: {e.category}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         ))}
       </Stack>
 
-      {/* later: map expenses here */}
     </div>
   );
 }
