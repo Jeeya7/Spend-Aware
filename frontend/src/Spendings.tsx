@@ -1,9 +1,22 @@
 import { useState } from "react";
 import "./style/Spendings.css";
 import AddSpending from "./AddSpending";
-import { Card, CardContent, Typography, Stack } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+
+import {
+  Card,
+  CardContent,
+  Typography,
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button,
+} from "@mui/material";
+
 
 export type Expense = {
   id: string;
@@ -18,12 +31,29 @@ function Spendings() {
   const [showAdd, setShowAdd] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
-  function addExpense(expense: Expense) {
-    setExpenses((prev) => [expense, ...prev]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  function requestDelete(id: string) {
+    setPendingDeleteId(id);
+    setConfirmOpen(true);
   }
 
-  function deleteExpense(id: string) {
-    setExpenses((prev) => prev.filter((e) => e.id !== id));
+  function cancelDelete() {
+    setConfirmOpen(false);
+    setPendingDeleteId(null);
+  }
+
+  function confirmDelete() {
+    if (pendingDeleteId) {
+      setExpenses((prev) => prev.filter((e) => e.id !== pendingDeleteId));
+    }
+    cancelDelete();
+  }
+
+
+  function addExpense(expense: Expense) {
+    setExpenses((prev) => [expense, ...prev]);
   }
 
   return (
@@ -79,7 +109,7 @@ function Spendings() {
 
                   <IconButton
                     size="small"
-                    onClick={() => deleteExpense(e.id)}
+                    onClick={() => requestDelete(e.id)}
                     sx={{
                       color: "#EC4899",
                       "&:hover": {
@@ -119,6 +149,21 @@ function Spendings() {
           </Card>
         ))}
       </Stack>
+    
+      <Dialog open={confirmOpen} onClose={cancelDelete}>
+        <DialogTitle>Delete expense?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently remove the expense. You can’t undo this.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelDelete}>Cancel</Button>
+          <Button onClick={confirmDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </div>
   );
