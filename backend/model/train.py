@@ -1,5 +1,5 @@
-class model():
-    def __init__(self, vocab_size=None, alpha=None):
+class Model():
+    def __init__(self, vocab_size=None, alpha=1.0):
         self.feature_count_per_class = {}
         self.total_feature_count_per_class = {}
         self.class_counts = {}
