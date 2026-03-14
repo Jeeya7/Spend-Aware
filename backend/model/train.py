@@ -46,8 +46,9 @@ class Model:
         total_docs = len(Y)
 
         # log priors
+        num_classes = len(class_names)
         for c in class_names:
-            self.log_class[c] = np.log(self.class_counts[c] / total_docs) if self.class_counts[c] > 0 else -np.inf
+            self.log_class[c] = np.log(1 / num_classes)
 
         # log likelihoods + unknown
         for c in class_names:

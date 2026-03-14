@@ -15,8 +15,10 @@ import {
   DialogContentText,
   DialogActions,
   Button,
+  TextField,
+  Snackbar,
+  Alert,
 } from "@mui/material";
-
 
 export type Expense = {
   id: string;
@@ -33,6 +35,17 @@ function Spendings() {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
+    null
+  );
+  const [categoryDraft, setCategoryDraft] = useState("");
+
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<
+    "success" | "error"
+  >("success");
 
   function requestDelete(id: string) {
     setPendingDeleteId(id);
@@ -51,9 +64,86 @@ function Spendings() {
     cancelDelete();
   }
 
+  function handleSnackbarClose() {
+    setSnackbarOpen(false);
+  }
 
   function addExpense(expense: Expense) {
     setExpenses((prev) => [expense, ...prev]);
+  }
+
+  function updateCategory(id: string, newCategory: string) {
+    setExpenses((prev) =>
+      prev.map((expense) =>
+        expense.id === id
+          ? { ...expense, category: newCategory.trim() }
+          : expense
+      )
+    );
+  }
+
+  function startEditingCategory(id: string, currentCategory?: string) {
+    setEditingCategoryId(id);
+    setCategoryDraft(currentCategory || "");
+  }
+
+  function cancelEditingCategory() {
+    setEditingCategoryId(null);
+    setCategoryDraft("");
+  }
+
+  async function saveCategory(id: string) {
+    const expense = expenses.find((e) => e.id === id);
+    if (!expense) return;
+
+    updateCategory(id, categoryDraft);
+
+    try {
+      const res = await fetch("http://127.0.0.1:8001/api/append_expense", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: expense.title,
+          category: categoryDraft,
+        }),
+      });
+
+      const data: { status: string } = await res.json();
+
+      if (data.status === "saved") {
+        setSnackbarMessage("System noted. Category updated.");
+        setSnackbarSeverity("success");
+      } else {
+        setSnackbarMessage("Could not save category.");
+        setSnackbarSeverity("error");
+      }
+
+      const trainres = await fetch("http://127.0.0.1:8000/api/train", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        }
+      });
+
+      const traindata: { status: string } = await trainres.json();
+
+      if (traindata.status === "model retrained") {
+        console.log("Model retrained successfully.");
+      }
+      else {
+        console.error("Model retraining failed.");
+      }
+
+    } catch (error) {
+      console.error("API error:", error);
+      setSnackbarMessage("Server error while saving category.");
+      setSnackbarSeverity("error");
+    }
+
+    setSnackbarOpen(true);
+    cancelEditingCategory();
   }
 
   return (
@@ -71,85 +161,161 @@ function Spendings() {
       )}
 
       <Stack spacing={2} sx={{ mt: 4, maxWidth: 600 }}>
-        {expenses.map((e) => (
-          <Card
-            key={e.id}
-            sx={{
-              borderRadius: 4,
-              border: "1px solid rgba(236,72,153,0.25)",
-              background: "linear-gradient(180deg, #FFF7FB 0%, #FFFFFF 100%)",
-              boxShadow: "0 12px 30px rgba(236,72,153,0.15)",
-            }}
-          >
-            <CardContent>
-              <Stack
-                direction="row"
-                justifyContent="space-between"
-                alignItems="center"
-              >
-                <Typography
-                  sx={{
-                    fontWeight: 700,
-                    color: "#9D174D",
-                    fontSize: "1.05rem",
-                  }}
-                >
-                  {e.title}
-                </Typography>
+        {expenses.map((e) => {
+          const isEditing = editingCategoryId === e.id;
 
-                <Stack direction="row" spacing={1} alignItems="center">
+          return (
+            <Card
+              key={e.id}
+              sx={{
+                borderRadius: 4,
+                border: "1px solid rgba(236,72,153,0.25)",
+                background: "linear-gradient(180deg, #FFF7FB 0%, #FFFFFF 100%)",
+                boxShadow: "0 12px 30px rgba(236,72,153,0.15)",
+              }}
+            >
+              <CardContent>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                >
                   <Typography
                     sx={{
-                      fontWeight: 800,
-                      color: "#BE185D",
+                      fontWeight: 700,
+                      color: "#9D174D",
+                      fontSize: "1.05rem",
                     }}
                   >
-                    ${e.amount}
+                    {e.title}
                   </Typography>
 
-                  <IconButton
-                    size="small"
-                    onClick={() => requestDelete(e.id)}
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography
+                      sx={{
+                        fontWeight: 800,
+                        color: "#BE185D",
+                      }}
+                    >
+                      ${e.amount}
+                    </Typography>
+
+                    <IconButton
+                      size="small"
+                      onClick={() => requestDelete(e.id)}
+                      sx={{
+                        color: "#EC4899",
+                        "&:hover": {
+                          backgroundColor: "rgba(236,72,153,0.12)",
+                        },
+                      }}
+                    >
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                </Stack>
+
+                {e.notes && (
+                  <Typography
                     sx={{
-                      color: "#EC4899",
-                      "&:hover": {
-                        backgroundColor: "rgba(236,72,153,0.12)",
-                      },
+                      mt: 1,
+                      color: "rgba(157,23,77,0.7)",
+                      fontSize: "0.9rem",
                     }}
                   >
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
+                    {e.notes}
+                  </Typography>
+                )}
+
+                <Stack spacing={1.2} sx={{ mt: 2 }}>
+                  {!isEditing ? (
+                    <>
+                      <Typography
+                        sx={{
+                          color: "rgba(157,23,77,0.9)",
+                          fontSize: "0.98rem",
+                        }}
+                      >
+                        <span style={{ fontWeight: 700 }}>Category:</span>{" "}
+                        {e.category?.trim() ? e.category : "Uncategorized"}
+                      </Typography>
+
+                      <Button
+                        variant="text"
+                        onClick={() =>
+                          startEditingCategory(e.id, e.category)
+                        }
+                        sx={{
+                          alignSelf: "flex-start",
+                          textTransform: "none",
+                          fontWeight: 600,
+                          color: "#EC4899",
+                          paddingLeft: 0,
+                          minWidth: "auto",
+                          "&:hover": {
+                            backgroundColor: "transparent",
+                            color: "#BE185D",
+                          },
+                        }}
+                      >
+                        Edit Category
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <TextField
+                        size="small"
+                        value={categoryDraft}
+                        placeholder="Enter category"
+                        onChange={(event) =>
+                          setCategoryDraft(event.target.value)
+                        }
+                        sx={{
+                          "& .MuiOutlinedInput-root": {
+                            borderRadius: 2,
+                            backgroundColor: "#fff",
+                          },
+                        }}
+                      />
+
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          variant="contained"
+                          onClick={() => saveCategory(e.id)}
+                          sx={{
+                            textTransform: "none",
+                            borderRadius: 2,
+                            backgroundColor: "#EC4899",
+                            "&:hover": {
+                              backgroundColor: "#DB2777",
+                            },
+                          }}
+                        >
+                          Save
+                        </Button>
+
+                        <Button
+                          variant="outlined"
+                          onClick={cancelEditingCategory}
+                          sx={{
+                            textTransform: "none",
+                            borderRadius: 2,
+                            borderColor: "rgba(236,72,153,0.35)",
+                            color: "#BE185D",
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </Stack>
+                    </>
+                  )}
                 </Stack>
-              </Stack>
-
-              {e.notes && (
-                <Typography
-                  sx={{
-                    mt: 1,
-                    color: "rgba(157,23,77,0.7)",
-                    fontSize: "0.9rem",
-                  }}
-                >
-                  {e.notes}
-                </Typography>
-              )}
-
-              {e.category && (
-                <Typography
-                  sx={{
-                    mt: 1,
-                    color: "rgba(157,23,77,0.7)",
-                    fontSize: "0.9rem",
-                  }}
-                >
-                  Category: {e.category}
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </Stack>
-    
+
       <Dialog open={confirmOpen} onClose={cancelDelete}>
         <DialogTitle>Delete expense?</DialogTitle>
         <DialogContent>
@@ -165,6 +331,21 @@ function Spendings() {
         </DialogActions>
       </Dialog>
 
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbarSeverity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </div>
   );
 }

@@ -1,0 +1,1 @@
+python -m uvicorn writer_service.api.app:app --reload --port 8001
