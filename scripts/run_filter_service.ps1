@@ -1,0 +1,1 @@
+python -m uvicorn filter_service.api.app:app --reload --port 8002

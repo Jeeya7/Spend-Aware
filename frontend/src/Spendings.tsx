@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./style/Spendings.css";
 import AddSpending from "./AddSpending";
 import IconButton from "@mui/material/IconButton";
@@ -18,6 +18,11 @@ import {
   TextField,
   Snackbar,
   Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  type SelectChangeEvent,
 } from "@mui/material";
 
 export type Expense = {
@@ -29,9 +34,15 @@ export type Expense = {
   category?: string;
 };
 
+type FilterOption = {
+  label: string;
+  value: string;
+};
+
 function Spendings() {
   const [showAdd, setShowAdd] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [displayedExpenses, setDisplayedExpenses] = useState<Expense[]>([]);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -46,6 +57,98 @@ function Spendings() {
   const [snackbarSeverity, setSnackbarSeverity] = useState<
     "success" | "error"
   >("success");
+
+  const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState("");
+  const [filterLoading, setFilterLoading] = useState(false);
+
+  useEffect(() => {
+    fetchFilterOptions();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedFilter) {
+      setDisplayedExpenses(expenses);
+      return;
+    }
+
+    applyFilter(selectedFilter, expenses);
+  }, [expenses, selectedFilter]);
+
+  async function fetchFilterOptions() {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/fill_filter", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data: string[] = await res.json();
+
+      setFilterOptions(
+        data.map((item) => ({
+          label: item,
+          value: item,
+        }))
+      );
+    } catch (error) {
+      console.error("Error fetching filter values:", error);
+      setSnackbarMessage("Could not load filter values.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    }
+  }
+  async function applyFilter(filterValue: string, spendingsToFilter: Expense[]) {
+    try {
+      setFilterLoading(true);
+
+      const spendingsDict: Record<string, string> = {};
+
+      spendingsToFilter.forEach((s) => {
+        if (s.category) {
+          spendingsDict[s.title] = s.category;
+        }
+      });
+
+      const res = await fetch("http://127.0.0.1:8002/api/filter", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          spendings: spendingsDict,
+          category: filterValue,
+        }),
+      });
+
+      const data: Record<string, string> = await res.json();
+
+      const filteredTitles = Object.keys(data);
+
+      const filteredExpenses = spendingsToFilter.filter((expense) =>
+        filteredTitles.includes(expense.title)
+      );
+
+      setDisplayedExpenses(filteredExpenses);
+    } catch (error) {
+      console.error("Error applying filter:", error);
+      setSnackbarMessage("Could not apply filter.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    } finally {
+      setFilterLoading(false);
+    }
+  }
+
+  function handleFilterChange(event: SelectChangeEvent) {
+    const value = event.target.value;
+    setSelectedFilter(value);
+
+    if (!value) {
+      setDisplayedExpenses(expenses);
+    }
+  }
 
   function requestDelete(id: string) {
     setPendingDeleteId(id);
@@ -124,18 +227,16 @@ function Spendings() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-        }
+        },
       });
 
       const traindata: { status: string } = await trainres.json();
 
       if (traindata.status === "model retrained") {
         console.log("Model retrained successfully.");
-      }
-      else {
+      } else {
         console.error("Model retraining failed.");
       }
-
     } catch (error) {
       console.error("API error:", error);
       setSnackbarMessage("Server error while saving category.");
@@ -160,8 +261,42 @@ function Spendings() {
         <AddSpending onClose={() => setShowAdd(false)} onAdd={addExpense} />
       )}
 
+      <Stack spacing={2} sx={{ mt: 3, maxWidth: 600 }}>
+        <FormControl fullWidth size="small">
+          <InputLabel id="filter-label">Filter</InputLabel>
+          <Select
+            labelId="filter-label"
+            value={selectedFilter}
+            label="Filter"
+            onChange={handleFilterChange}
+            sx={{
+              borderRadius: 2,
+              backgroundColor: "#fff",
+            }}
+          >
+            <MenuItem value="">All</MenuItem>
+            {filterOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {filterLoading && (
+          <Typography
+            sx={{
+              color: "rgba(157,23,77,0.75)",
+              fontSize: "0.95rem",
+            }}
+          >
+            Applying filter...
+          </Typography>
+        )}
+      </Stack>
+
       <Stack spacing={2} sx={{ mt: 4, maxWidth: 600 }}>
-        {expenses.map((e) => {
+        {displayedExpenses.map((e) => {
           const isEditing = editingCategoryId === e.id;
 
           return (

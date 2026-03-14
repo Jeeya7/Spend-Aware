@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from backend.services.predict_service import predict_service
 from backend.services.train_services import train_service
+from backend.services.fill_filter_services import fill_filter_service
 
 router = APIRouter()
 
@@ -21,3 +22,7 @@ def predict(req: PredictRequest):
 def train():
     train_service()
     return {"status": "model retrained"}
+
+@router.post("/api/fill_filter")
+def fill_filter():
+    return fill_filter_service()
