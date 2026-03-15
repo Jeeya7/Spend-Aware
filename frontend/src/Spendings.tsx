@@ -42,10 +42,62 @@ type ColorsResponse = {
   colors: Record<string, string>;
 };
 
+const seedExpenses: Expense[] = [
+  {
+    id: "1",
+    title: "Starbucks Coffee",
+    amount: 6.75,
+    date: new Date("2026-03-10"),
+    notes: "Morning coffee",
+    category: "Food",
+  },
+  {
+    id: "2",
+    title: "Safeway Groceries",
+    amount: 42.3,
+    date: new Date("2026-03-09"),
+    notes: "Weekly groceries",
+    category: "Groceries",
+  },
+  {
+    id: "3",
+    title: "Chipotle Lunch",
+    amount: 12.5,
+    date: new Date("2026-03-08"),
+    notes: "Lunch after class",
+    category: "Food",
+  },
+  {
+    id: "4",
+    title: "Uber Ride",
+    amount: 18.2,
+    date: new Date("2026-03-07"),
+    notes: "Ride to downtown",
+    category: "Transport",
+  },
+  {
+    id: "5",
+    title: "Netflix Subscription",
+    amount: 15.99,
+    date: new Date("2026-03-06"),
+    notes: "Monthly subscription",
+    category: "Entertainment",
+  },
+  {
+    id: "6",
+    title: "Trader Joe's",
+    amount: 27.45,
+    date: new Date("2026-03-05"),
+    notes: "Snacks and fruit",
+    category: "Groceries",
+  },
+];
+
 function Spendings() {
   const [showAdd, setShowAdd] = useState(false);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [displayedExpenses, setDisplayedExpenses] = useState<Expense[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>(seedExpenses);
+  const [displayedExpenses, setDisplayedExpenses] =
+    useState<Expense[]>(seedExpenses);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -71,6 +123,9 @@ function Spendings() {
   );
   const [colorLoading, setColorLoading] = useState(false);
 
+  const [chartUrl, setChartUrl] = useState<string | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
+
   useEffect(() => {
     fetchFilterOptions();
   }, []);
@@ -83,6 +138,22 @@ function Spendings() {
 
     applyFilter(selectedFilter, expenses);
   }, [expenses, selectedFilter]);
+
+  useEffect(() => {
+    assignColorsToCategoriesOnLoad();
+  }, [expenses]);
+
+  useEffect(() => {
+    fetchChart(displayedExpenses);
+  }, [displayedExpenses]);
+
+  useEffect(() => {
+    return () => {
+      if (chartUrl) {
+        URL.revokeObjectURL(chartUrl);
+      }
+    };
+  }, [chartUrl]);
 
   async function fetchFilterOptions() {
     try {
@@ -106,6 +177,86 @@ function Spendings() {
       setSnackbarMessage("Could not load filter values.");
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
+    }
+  }
+
+  async function fetchChart(expensesToVisualize: Expense[]) {
+    if (expensesToVisualize.length === 0) {
+      setChartUrl((prevUrl) => {
+        if (prevUrl) URL.revokeObjectURL(prevUrl);
+        return null;
+      });
+      return;
+    }
+
+    try {
+      setChartLoading(true);
+
+      const payload = {
+        expenses: expensesToVisualize.map((expense) => ({
+          title: expense.title,
+          category: expense.category?.trim() || "Uncategorized",
+          amount: expense.amount,
+        })),
+      };
+
+      const res = await fetch("http://127.0.0.1:8004/api/visualize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error("Could not generate chart.");
+      }
+
+      const blob = await res.blob();
+      const imageUrl = URL.createObjectURL(blob);
+
+      setChartUrl((prevUrl) => {
+        if (prevUrl) URL.revokeObjectURL(prevUrl);
+        return imageUrl;
+      });
+    } catch (error) {
+      console.error("Error fetching chart:", error);
+      setChartUrl((prevUrl) => {
+        if (prevUrl) URL.revokeObjectURL(prevUrl);
+        return null;
+      });
+      setSnackbarMessage("Could not load expense graph.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    } finally {
+      setChartLoading(false);
+    }
+  }
+
+  async function assignColorsToCategoriesOnLoad() {
+    const categories = Array.from(
+      new Set(
+        expenses
+          .map((expense) => expense.category?.trim())
+          .filter((category): category is string => Boolean(category))
+      )
+    );
+
+    if (categories.length === 0) return;
+
+    try {
+      const res = await fetch("http://127.0.0.1:8003/api/category_colors", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ categories }),
+      });
+
+      const data: ColorsResponse = await res.json();
+      setCategoryColors(data.colors);
+    } catch (error) {
+      console.error("Error assigning initial category colors:", error);
     }
   }
 
@@ -180,7 +331,6 @@ function Spendings() {
       });
 
       const data: Record<string, string> = await res.json();
-
       const filteredTitles = Object.keys(data);
 
       const filteredExpenses = spendingsToFilter.filter((expense) =>
@@ -353,8 +503,12 @@ function Spendings() {
         <AddSpending onClose={() => setShowAdd(false)} onAdd={addExpense} />
       )}
 
-      <Stack spacing={2} sx={{ mt: 3, maxWidth: 600 }}>
-        <Stack direction="row" spacing={2}>
+      <Stack spacing={2} sx={{ mt: 3, maxWidth: 1100 }}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          sx={{ width: "100%" }}
+        >
           <FormControl fullWidth size="small">
             <InputLabel id="filter-label">Filter</InputLabel>
             <Select
@@ -380,7 +534,7 @@ function Spendings() {
             variant="contained"
             onClick={assignColorsToCategories}
             sx={{
-              minWidth: 150,
+              minWidth: { xs: "100%", sm: 150 },
               textTransform: "none",
               borderRadius: 2,
               backgroundColor: "#EC4899",
@@ -416,245 +570,315 @@ function Spendings() {
         )}
       </Stack>
 
-      <Stack spacing={2} sx={{ mt: 4, maxWidth: 600 }}>
-        {displayedExpenses.map((e) => {
-          const isEditing = editingCategoryId === e.id;
-          const trimmedCategory = e.category?.trim() || "";
-          const cardColor = trimmedCategory
-            ? categoryColors[trimmedCategory] || "#EC4899"
-            : "#EC4899";
+      <Stack
+        direction={{ xs: "column", lg: "row" }}
+        spacing={4}
+        alignItems="flex-start"
+        sx={{ mt: 4, maxWidth: 1100 }}
+      >
+        <Stack spacing={2} sx={{ flex: 1, minWidth: 0, width: "100%" }}>
+          {displayedExpenses.map((e) => {
+            const isEditing = editingCategoryId === e.id;
+            const trimmedCategory = e.category?.trim() || "";
+            const cardColor = trimmedCategory
+              ? categoryColors[trimmedCategory] || "#EC4899"
+              : "#EC4899";
 
-          return (
-            <Card
-              key={e.id}
-              sx={{
-                borderRadius: 4,
-                borderLeft: `10px solid ${cardColor}`,
-                borderTop: `2px solid ${cardColor}`,
-                borderRight: `1px solid ${cardColor}55`,
-                borderBottom: `1px solid ${cardColor}55`,
-                backgroundColor: `${cardColor}22`,
-                boxShadow: `0 12px 30px ${cardColor}33`,
-              }}
-            >
-              <CardContent>
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="center"
-                >
-                  <Typography
-                    sx={{
-                      fontWeight: 700,
-                      color: "#9D174D",
-                      fontSize: "1.05rem",
-                    }}
+            return (
+              <Card
+                key={e.id}
+                sx={{
+                  borderRadius: 4,
+                  borderLeft: `10px solid ${cardColor}`,
+                  borderTop: `2px solid ${cardColor}`,
+                  borderRight: `1px solid ${cardColor}55`,
+                  borderBottom: `1px solid ${cardColor}55`,
+                  backgroundColor: `${cardColor}22`,
+                  boxShadow: `0 12px 30px ${cardColor}33`,
+                }}
+              >
+                <CardContent>
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="center"
                   >
-                    {e.title}
-                  </Typography>
-
-                  <Stack direction="row" spacing={1} alignItems="center">
                     <Typography
                       sx={{
-                        fontWeight: 800,
-                        color: "#BE185D",
+                        fontWeight: 700,
+                        color: "#9D174D",
+                        fontSize: "1.05rem",
                       }}
                     >
-                      ${e.amount}
+                      {e.title}
                     </Typography>
 
-                    <IconButton
-                      size="small"
-                      onClick={() => requestDelete(e.id)}
-                      sx={{
-                        color: "#EC4899",
-                        "&:hover": {
-                          backgroundColor: "rgba(236,72,153,0.12)",
-                        },
-                      }}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                </Stack>
-
-                {e.notes && (
-                  <Typography
-                    sx={{
-                      mt: 1,
-                      color: "rgba(157,23,77,0.7)",
-                      fontSize: "0.9rem",
-                    }}
-                  >
-                    {e.notes}
-                  </Typography>
-                )}
-
-                <Stack spacing={1.2} sx={{ mt: 2 }}>
-                  {!isEditing ? (
-                    <>
-                      <Stack direction="row" spacing={1.2} alignItems="center">
-                        <Typography
-                          sx={{
-                            color: "rgba(157,23,77,0.9)",
-                            fontSize: "0.98rem",
-                          }}
-                        >
-                          <span style={{ fontWeight: 700 }}>Category:</span>{" "}
-                          {trimmedCategory || "Uncategorized"}
-                        </Typography>
-
-                        {trimmedCategory && categoryColors[trimmedCategory] && (
-                          <div
-                            style={{
-                              width: 14,
-                              height: 14,
-                              borderRadius: "50%",
-                              backgroundColor: categoryColors[trimmedCategory],
-                              border: "1px solid rgba(0,0,0,0.15)",
-                            }}
-                          />
-                        )}
-                      </Stack>
-
-                      <Button
-                        variant="text"
-                        onClick={() => startEditingCategory(e.id, e.category)}
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography
                         sx={{
-                          alignSelf: "flex-start",
-                          textTransform: "none",
-                          fontWeight: 600,
+                          fontWeight: 800,
+                          color: "#BE185D",
+                        }}
+                      >
+                        ${e.amount.toFixed(2)}
+                      </Typography>
+
+                      <IconButton
+                        size="small"
+                        onClick={() => requestDelete(e.id)}
+                        sx={{
                           color: "#EC4899",
-                          paddingLeft: 0,
-                          minWidth: "auto",
                           "&:hover": {
-                            backgroundColor: "transparent",
-                            color: "#BE185D",
+                            backgroundColor: "rgba(236,72,153,0.12)",
                           },
                         }}
                       >
-                        Edit Category
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <FormControl fullWidth size="small">
-                        <InputLabel id={`edit-category-label-${e.id}`}>
-                          Category
-                        </InputLabel>
-                        <Select
-                          labelId={`edit-category-label-${e.id}`}
-                          value={categoryDraft}
-                          label="Category"
-                          onChange={(event) => {
-                            const newCategory = event.target.value.trim();
-                            setCategoryDraft(newCategory);
-                            setColorDraft(
-                              categoryColors[newCategory] || "#EC4899"
-                            );
-                          }}
-                          sx={{
-                            borderRadius: 2,
-                            backgroundColor: "#fff",
-                          }}
-                        >
-                          {filterOptions.map((option) => {
-                            const optionCategory = option.value.trim();
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  </Stack>
 
-                            return (
-                              <MenuItem
-                                key={option.value}
-                                value={optionCategory}
-                              >
-                                <Stack
-                                  direction="row"
-                                  spacing={1}
-                                  alignItems="center"
-                                >
-                                  <div
-                                    style={{
-                                      width: 12,
-                                      height: 12,
-                                      borderRadius: "50%",
-                                      backgroundColor:
-                                        categoryColors[optionCategory] ||
-                                        "#EC4899",
-                                      border: "1px solid rgba(0,0,0,0.15)",
-                                    }}
-                                  />
-                                  <span>{option.label}</span>
-                                </Stack>
-                              </MenuItem>
-                            );
-                          })}
-                        </Select>
-                      </FormControl>
+                  {e.notes && (
+                    <Typography
+                      sx={{
+                        mt: 1,
+                        color: "rgba(157,23,77,0.7)",
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      {e.notes}
+                    </Typography>
+                  )}
 
-                      {categoryDraft.trim() && (
-                        <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Stack spacing={1.2} sx={{ mt: 2 }}>
+                    {!isEditing ? (
+                      <>
+                        <Stack direction="row" spacing={1.2} alignItems="center">
                           <Typography
                             sx={{
                               color: "rgba(157,23,77,0.9)",
-                              fontSize: "0.95rem",
-                              fontWeight: 600,
+                              fontSize: "0.98rem",
                             }}
                           >
-                            Pick Color:
+                            <span style={{ fontWeight: 700 }}>Category:</span>{" "}
+                            {trimmedCategory || "Uncategorized"}
                           </Typography>
 
-                          <input
-                            type="color"
-                            value={colorDraft}
-                            onChange={(event) =>
-                              setColorDraft(event.target.value)
-                            }
-                            style={{
-                              width: 44,
-                              height: 36,
-                              border: "none",
-                              background: "transparent",
-                              cursor: "pointer",
-                            }}
-                          />
+                          {trimmedCategory &&
+                            categoryColors[trimmedCategory] && (
+                              <div
+                                style={{
+                                  width: 14,
+                                  height: 14,
+                                  borderRadius: "50%",
+                                  backgroundColor:
+                                    categoryColors[trimmedCategory],
+                                  border: "1px solid rgba(0,0,0,0.15)",
+                                }}
+                              />
+                            )}
                         </Stack>
-                      )}
 
-                      <Stack direction="row" spacing={1}>
                         <Button
-                          variant="contained"
-                          onClick={() => saveCategory(e.id)}
+                          variant="text"
+                          onClick={() => startEditingCategory(e.id, e.category)}
                           sx={{
+                            alignSelf: "flex-start",
                             textTransform: "none",
-                            borderRadius: 2,
-                            backgroundColor: "#EC4899",
+                            fontWeight: 600,
+                            color: "#EC4899",
+                            paddingLeft: 0,
+                            minWidth: "auto",
                             "&:hover": {
-                              backgroundColor: "#DB2777",
+                              backgroundColor: "transparent",
+                              color: "#BE185D",
                             },
                           }}
                         >
-                          Save
+                          Edit Category
                         </Button>
+                      </>
+                    ) : (
+                      <>
+                        <FormControl fullWidth size="small">
+                          <InputLabel id={`edit-category-label-${e.id}`}>
+                            Category
+                          </InputLabel>
+                          <Select
+                            labelId={`edit-category-label-${e.id}`}
+                            value={categoryDraft}
+                            label="Category"
+                            onChange={(event) => {
+                              const newCategory = event.target.value.trim();
+                              setCategoryDraft(newCategory);
+                              setColorDraft(
+                                categoryColors[newCategory] || "#EC4899"
+                              );
+                            }}
+                            sx={{
+                              borderRadius: 2,
+                              backgroundColor: "#fff",
+                            }}
+                          >
+                            {filterOptions.map((option) => {
+                              const optionCategory = option.value.trim();
 
-                        <Button
-                          variant="outlined"
-                          onClick={cancelEditingCategory}
-                          sx={{
-                            textTransform: "none",
-                            borderRadius: 2,
-                            borderColor: "rgba(236,72,153,0.35)",
-                            color: "#BE185D",
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </Stack>
-                    </>
-                  )}
-                </Stack>
-              </CardContent>
-            </Card>
-          );
-        })}
+                              return (
+                                <MenuItem
+                                  key={option.value}
+                                  value={optionCategory}
+                                >
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    alignItems="center"
+                                  >
+                                    <div
+                                      style={{
+                                        width: 12,
+                                        height: 12,
+                                        borderRadius: "50%",
+                                        backgroundColor:
+                                          categoryColors[optionCategory] ||
+                                          "#EC4899",
+                                        border: "1px solid rgba(0,0,0,0.15)",
+                                      }}
+                                    />
+                                    <span>{option.label}</span>
+                                  </Stack>
+                                </MenuItem>
+                              );
+                            })}
+                          </Select>
+                        </FormControl>
+
+                        {categoryDraft.trim() && (
+                          <Stack
+                            direction="row"
+                            spacing={1.5}
+                            alignItems="center"
+                          >
+                            <Typography
+                              sx={{
+                                color: "rgba(157,23,77,0.9)",
+                                fontSize: "0.95rem",
+                                fontWeight: 600,
+                              }}
+                            >
+                              Pick Color:
+                            </Typography>
+
+                            <input
+                              type="color"
+                              value={colorDraft}
+                              onChange={(event) =>
+                                setColorDraft(event.target.value)
+                              }
+                              style={{
+                                width: 44,
+                                height: 36,
+                                border: "none",
+                                background: "transparent",
+                                cursor: "pointer",
+                              }}
+                            />
+                          </Stack>
+                        )}
+
+                        <Stack direction="row" spacing={1}>
+                          <Button
+                            variant="contained"
+                            onClick={() => saveCategory(e.id)}
+                            sx={{
+                              textTransform: "none",
+                              borderRadius: 2,
+                              backgroundColor: "#EC4899",
+                              "&:hover": {
+                                backgroundColor: "#DB2777",
+                              },
+                            }}
+                          >
+                            Save
+                          </Button>
+
+                          <Button
+                            variant="outlined"
+                            onClick={cancelEditingCategory}
+                            sx={{
+                              textTransform: "none",
+                              borderRadius: 2,
+                              borderColor: "rgba(236,72,153,0.35)",
+                              color: "#BE185D",
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </Stack>
+                      </>
+                    )}
+                  </Stack>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Stack>
+
+        <Card
+          sx={{
+            width: { xs: "100%", lg: 380 },
+            flexShrink: 0,
+            position: { lg: "sticky" },
+            top: { lg: 24 },
+            borderRadius: 4,
+            background:
+              "linear-gradient(135deg, rgba(255,240,246,0.95), rgba(253,242,248,0.95))",
+            border: "1px solid rgba(236,72,153,0.18)",
+            boxShadow: "0 10px 30px rgba(236,72,153,0.12)",
+          }}
+        >
+          <CardContent>
+            <Typography
+              sx={{
+                fontWeight: 700,
+                color: "#9D174D",
+                fontSize: "1.05rem",
+                mb: 2,
+              }}
+            >
+              Expense Visualization
+            </Typography>
+
+            {chartLoading ? (
+              <Typography
+                sx={{
+                  color: "rgba(157,23,77,0.75)",
+                  fontSize: "0.95rem",
+                }}
+              >
+                Generating chart...
+              </Typography>
+            ) : chartUrl ? (
+              <img
+                src={chartUrl}
+                alt="Expenses by category"
+                style={{
+                  width: "100%",
+                  borderRadius: "14px",
+                  display: "block",
+                }}
+              />
+            ) : (
+              <Typography
+                sx={{
+                  color: "rgba(157,23,77,0.75)",
+                  fontSize: "0.95rem",
+                }}
+              >
+                No chart available.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
       </Stack>
 
       <Dialog open={confirmOpen} onClose={cancelDelete}>

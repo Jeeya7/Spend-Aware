@@ -1,0 +1,1 @@
+python -m uvicorn visualizer_microservice.api.app:app --reload --port 8004
