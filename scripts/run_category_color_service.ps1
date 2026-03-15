@@ -1,0 +1,1 @@
+python -m uvicorn category_color_mapping_service.api.app:app --reload --port 8003

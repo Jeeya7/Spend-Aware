@@ -15,7 +15,6 @@ import {
   DialogContentText,
   DialogActions,
   Button,
-  TextField,
   Snackbar,
   Alert,
   FormControl,
@@ -39,6 +38,10 @@ type FilterOption = {
   value: string;
 };
 
+type ColorsResponse = {
+  colors: Record<string, string>;
+};
+
 function Spendings() {
   const [showAdd, setShowAdd] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -51,6 +54,7 @@ function Spendings() {
     null
   );
   const [categoryDraft, setCategoryDraft] = useState("");
+  const [colorDraft, setColorDraft] = useState("#EC4899");
 
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
@@ -61,6 +65,11 @@ function Spendings() {
   const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
   const [selectedFilter, setSelectedFilter] = useState("");
   const [filterLoading, setFilterLoading] = useState(false);
+
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>(
+    {}
+  );
+  const [colorLoading, setColorLoading] = useState(false);
 
   useEffect(() => {
     fetchFilterOptions();
@@ -99,15 +108,63 @@ function Spendings() {
       setSnackbarOpen(true);
     }
   }
-  async function applyFilter(filterValue: string, spendingsToFilter: Expense[]) {
+
+  async function assignColorsToCategories() {
+    const categories = Array.from(
+      new Set(
+        expenses
+          .map((expense) => expense.category?.trim())
+          .filter((category): category is string => Boolean(category))
+      )
+    );
+
+    if (categories.length === 0) {
+      setSnackbarMessage("No categories found to assign colors.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+      return;
+    }
+
+    try {
+      setColorLoading(true);
+
+      const res = await fetch("http://127.0.0.1:8003/api/category_colors", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ categories }),
+      });
+
+      const data: ColorsResponse = await res.json();
+      setCategoryColors(data.colors);
+
+      setSnackbarMessage("Colors assigned to categories.");
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+    } catch (error) {
+      console.error("Error assigning category colors:", error);
+      setSnackbarMessage("Could not assign category colors.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    } finally {
+      setColorLoading(false);
+    }
+  }
+
+  async function applyFilter(
+    filterValue: string,
+    spendingsToFilter: Expense[]
+  ) {
     try {
       setFilterLoading(true);
 
       const spendingsDict: Record<string, string> = {};
 
       spendingsToFilter.forEach((s) => {
-        if (s.category) {
-          spendingsDict[s.title] = s.category;
+        const trimmedCategory = s.category?.trim();
+        if (trimmedCategory) {
+          spendingsDict[s.title] = trimmedCategory;
         }
       });
 
@@ -176,30 +233,42 @@ function Spendings() {
   }
 
   function updateCategory(id: string, newCategory: string) {
+    const trimmedCategory = newCategory.trim();
+
     setExpenses((prev) =>
       prev.map((expense) =>
-        expense.id === id
-          ? { ...expense, category: newCategory.trim() }
-          : expense
+        expense.id === id ? { ...expense, category: trimmedCategory } : expense
       )
     );
   }
 
   function startEditingCategory(id: string, currentCategory?: string) {
+    const trimmedCategory = currentCategory?.trim() || "";
     setEditingCategoryId(id);
-    setCategoryDraft(currentCategory || "");
+    setCategoryDraft(trimmedCategory);
+    setColorDraft(categoryColors[trimmedCategory] || "#EC4899");
   }
 
   function cancelEditingCategory() {
     setEditingCategoryId(null);
     setCategoryDraft("");
+    setColorDraft("#EC4899");
   }
 
   async function saveCategory(id: string) {
     const expense = expenses.find((e) => e.id === id);
     if (!expense) return;
 
-    updateCategory(id, categoryDraft);
+    const trimmedCategory = categoryDraft.trim();
+
+    if (!trimmedCategory) {
+      setSnackbarMessage("Please select a category.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+      return;
+    }
+
+    updateCategory(id, trimmedCategory);
 
     try {
       const res = await fetch("http://127.0.0.1:8001/api/append_expense", {
@@ -209,34 +278,57 @@ function Spendings() {
         },
         body: JSON.stringify({
           title: expense.title,
-          category: categoryDraft,
+          category: trimmedCategory,
         }),
       });
 
       const data: { status: string } = await res.json();
 
-      if (data.status === "saved") {
-        setSnackbarMessage("System noted. Category updated.");
-        setSnackbarSeverity("success");
-      } else {
+      if (data.status !== "saved") {
         setSnackbarMessage("Could not save category.");
         setSnackbarSeverity("error");
+        setSnackbarOpen(true);
+        return;
       }
 
-      const trainres = await fetch("http://127.0.0.1:8000/api/train", {
+      const updatedCatColors = {
+        ...categoryColors,
+        [trimmedCategory]: colorDraft,
+      };
+
+      const colorRes = await fetch(
+        "http://127.0.0.1:8003/api/reassign_category_colors",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            cat_colors: updatedCatColors,
+            category: trimmedCategory,
+            new_color: colorDraft,
+          }),
+        }
+      );
+
+      const colorData: ColorsResponse = await colorRes.json();
+      setCategoryColors(colorData.colors);
+
+      const trainRes = await fetch("http://127.0.0.1:8000/api/train", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
       });
 
-      const traindata: { status: string } = await trainres.json();
+      const trainData: { status: string } = await trainRes.json();
 
-      if (traindata.status === "model retrained") {
-        console.log("Model retrained successfully.");
-      } else {
+      if (trainData.status !== "model retrained") {
         console.error("Model retraining failed.");
       }
+
+      setSnackbarMessage("Category and color updated.");
+      setSnackbarSeverity("success");
     } catch (error) {
       console.error("API error:", error);
       setSnackbarMessage("Server error while saving category.");
@@ -262,26 +354,44 @@ function Spendings() {
       )}
 
       <Stack spacing={2} sx={{ mt: 3, maxWidth: 600 }}>
-        <FormControl fullWidth size="small">
-          <InputLabel id="filter-label">Filter</InputLabel>
-          <Select
-            labelId="filter-label"
-            value={selectedFilter}
-            label="Filter"
-            onChange={handleFilterChange}
+        <Stack direction="row" spacing={2}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="filter-label">Filter</InputLabel>
+            <Select
+              labelId="filter-label"
+              value={selectedFilter}
+              label="Filter"
+              onChange={handleFilterChange}
+              sx={{
+                borderRadius: 2,
+                backgroundColor: "#fff",
+              }}
+            >
+              <MenuItem value="">All</MenuItem>
+              {filterOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Button
+            variant="contained"
+            onClick={assignColorsToCategories}
             sx={{
+              minWidth: 150,
+              textTransform: "none",
               borderRadius: 2,
-              backgroundColor: "#fff",
+              backgroundColor: "#EC4899",
+              "&:hover": {
+                backgroundColor: "#DB2777",
+              },
             }}
           >
-            <MenuItem value="">All</MenuItem>
-            {filterOptions.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+            Assign Colors
+          </Button>
+        </Stack>
 
         {filterLoading && (
           <Typography
@@ -293,20 +403,38 @@ function Spendings() {
             Applying filter...
           </Typography>
         )}
+
+        {colorLoading && (
+          <Typography
+            sx={{
+              color: "rgba(157,23,77,0.75)",
+              fontSize: "0.95rem",
+            }}
+          >
+            Loading category colors...
+          </Typography>
+        )}
       </Stack>
 
       <Stack spacing={2} sx={{ mt: 4, maxWidth: 600 }}>
         {displayedExpenses.map((e) => {
           const isEditing = editingCategoryId === e.id;
+          const trimmedCategory = e.category?.trim() || "";
+          const cardColor = trimmedCategory
+            ? categoryColors[trimmedCategory] || "#EC4899"
+            : "#EC4899";
 
           return (
             <Card
               key={e.id}
               sx={{
                 borderRadius: 4,
-                border: "1px solid rgba(236,72,153,0.25)",
-                background: "linear-gradient(180deg, #FFF7FB 0%, #FFFFFF 100%)",
-                boxShadow: "0 12px 30px rgba(236,72,153,0.15)",
+                borderLeft: `10px solid ${cardColor}`,
+                borderTop: `2px solid ${cardColor}`,
+                borderRight: `1px solid ${cardColor}55`,
+                borderBottom: `1px solid ${cardColor}55`,
+                backgroundColor: `${cardColor}22`,
+                boxShadow: `0 12px 30px ${cardColor}33`,
               }}
             >
               <CardContent>
@@ -365,21 +493,33 @@ function Spendings() {
                 <Stack spacing={1.2} sx={{ mt: 2 }}>
                   {!isEditing ? (
                     <>
-                      <Typography
-                        sx={{
-                          color: "rgba(157,23,77,0.9)",
-                          fontSize: "0.98rem",
-                        }}
-                      >
-                        <span style={{ fontWeight: 700 }}>Category:</span>{" "}
-                        {e.category?.trim() ? e.category : "Uncategorized"}
-                      </Typography>
+                      <Stack direction="row" spacing={1.2} alignItems="center">
+                        <Typography
+                          sx={{
+                            color: "rgba(157,23,77,0.9)",
+                            fontSize: "0.98rem",
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>Category:</span>{" "}
+                          {trimmedCategory || "Uncategorized"}
+                        </Typography>
+
+                        {trimmedCategory && categoryColors[trimmedCategory] && (
+                          <div
+                            style={{
+                              width: 14,
+                              height: 14,
+                              borderRadius: "50%",
+                              backgroundColor: categoryColors[trimmedCategory],
+                              border: "1px solid rgba(0,0,0,0.15)",
+                            }}
+                          />
+                        )}
+                      </Stack>
 
                       <Button
                         variant="text"
-                        onClick={() =>
-                          startEditingCategory(e.id, e.category)
-                        }
+                        onClick={() => startEditingCategory(e.id, e.category)}
                         sx={{
                           alignSelf: "flex-start",
                           textTransform: "none",
@@ -398,20 +538,86 @@ function Spendings() {
                     </>
                   ) : (
                     <>
-                      <TextField
-                        size="small"
-                        value={categoryDraft}
-                        placeholder="Enter category"
-                        onChange={(event) =>
-                          setCategoryDraft(event.target.value)
-                        }
-                        sx={{
-                          "& .MuiOutlinedInput-root": {
+                      <FormControl fullWidth size="small">
+                        <InputLabel id={`edit-category-label-${e.id}`}>
+                          Category
+                        </InputLabel>
+                        <Select
+                          labelId={`edit-category-label-${e.id}`}
+                          value={categoryDraft}
+                          label="Category"
+                          onChange={(event) => {
+                            const newCategory = event.target.value.trim();
+                            setCategoryDraft(newCategory);
+                            setColorDraft(
+                              categoryColors[newCategory] || "#EC4899"
+                            );
+                          }}
+                          sx={{
                             borderRadius: 2,
                             backgroundColor: "#fff",
-                          },
-                        }}
-                      />
+                          }}
+                        >
+                          {filterOptions.map((option) => {
+                            const optionCategory = option.value.trim();
+
+                            return (
+                              <MenuItem
+                                key={option.value}
+                                value={optionCategory}
+                              >
+                                <Stack
+                                  direction="row"
+                                  spacing={1}
+                                  alignItems="center"
+                                >
+                                  <div
+                                    style={{
+                                      width: 12,
+                                      height: 12,
+                                      borderRadius: "50%",
+                                      backgroundColor:
+                                        categoryColors[optionCategory] ||
+                                        "#EC4899",
+                                      border: "1px solid rgba(0,0,0,0.15)",
+                                    }}
+                                  />
+                                  <span>{option.label}</span>
+                                </Stack>
+                              </MenuItem>
+                            );
+                          })}
+                        </Select>
+                      </FormControl>
+
+                      {categoryDraft.trim() && (
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Typography
+                            sx={{
+                              color: "rgba(157,23,77,0.9)",
+                              fontSize: "0.95rem",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Pick Color:
+                          </Typography>
+
+                          <input
+                            type="color"
+                            value={colorDraft}
+                            onChange={(event) =>
+                              setColorDraft(event.target.value)
+                            }
+                            style={{
+                              width: 44,
+                              height: 36,
+                              border: "none",
+                              background: "transparent",
+                              cursor: "pointer",
+                            }}
+                          />
+                        </Stack>
+                      )}
 
                       <Stack direction="row" spacing={1}>
                         <Button
